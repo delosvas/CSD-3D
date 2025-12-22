@@ -1,89 +1,45 @@
-/*This script handles communication with the Gemini API for LLM responses.*/
+/*This script handles communication with the Python backend server for LLM responses.
+ * The server runs FastAPI + LangChain + ChromaDB + Gemini for RAG-based answers.*/
 using UnityEngine;
 using System.Collections;
-using System.Collections.Generic;
 using System.Text;
 
 public class GeminiAPIClient : MonoBehaviour
 {
-    [Header("API Configuration")]
-    [Tooltip("Gemini API Key (keep secret!)")]
-    public string apiKey = "";
+    [Header("Server Configuration")]
+    [Tooltip("URL of the Python backend server")]
+    public string serverUrl = "http://localhost:8000";
     
-    [Tooltip("API endpoint URL")]
-    public string apiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+    [Tooltip("API endpoint path")]
+    public string chatEndpoint = "/api/chat";
     
     [Header("Settings")]
-    [Tooltip("Maximum context length")]
-    public int maxContextLength = 2000;
-    
     [Tooltip("Request timeout in seconds")]
     public float requestTimeout = 30f;
-    
-    // Reference to vector store manager (for context)
-    private VectorStoreManager vectorStore;
     
     // Callback type for API responses
     public delegate void APIResponseCallback(string response, bool success);
     
     void Start()
     {
-        // Try to find vector store manager
-        vectorStore = FindObjectOfType<VectorStoreManager>();
-        if (vectorStore == null)
-        {
-            Debug.LogWarning("GeminiAPIClient: VectorStoreManager not found. Responses will be without context.");
-        }
-        
-        // Load API key from config if available
-        LoadAPIKey();
+        Debug.Log($"GeminiAPIClient: Configured to use server at {serverUrl}{chatEndpoint}");
     }
     
     /// <summary>
-    /// Loads API key from configuration (if available)
-    /// </summary>
-    void LoadAPIKey()
-    {
-        // Try to load from NPCConfig if it exists
-        // For now, API key should be set in inspector or via environment variable
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            // Try environment variable as fallback
-            apiKey = System.Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-        }
-    }
-    
-    /// <summary>
-    /// Sends a message to the Gemini API and gets a response
+    /// Sends a message to the Python backend and gets a RAG-powered response
     /// </summary>
     public IEnumerator SendMessage(string userMessage, APIResponseCallback callback)
     {
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            Debug.LogError("GeminiAPIClient: API key is not set!");
-            callback?.Invoke("", false);
-            yield break;
-        }
+        string url = $"{serverUrl}{chatEndpoint}";
         
-        // Get relevant context from vector store
-        string[] context = null;
-        if (vectorStore != null)
-        {
-            context = vectorStore.GetContextForQuery(userMessage);
-        }
-        
-        // Format the prompt
-        string prompt = FormatPrompt(userMessage, context);
-        
-        // Create request
-        string url = $"{apiEndpoint}?key={apiKey}";
-        
-        // Create request body (simple JSON format)
-        string jsonBody = "{\"contents\":[{\"parts\":[{\"text\":\"" + EscapeJsonString(prompt) + "\"}]}]}";
+        // Create request body JSON
+        string jsonBody = "{\"text\":\"" + EscapeJsonString(userMessage) + "\"}";
         byte[] bodyData = Encoding.UTF8.GetBytes(jsonBody);
         
+        Debug.Log($"GeminiAPIClient: Sending request to {url}");
+        
         // Send request
-        using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.PostWwwForm(url, ""))
+        using (UnityEngine.Networking.UnityWebRequest request = new UnityEngine.Networking.UnityWebRequest(url, "POST"))
         {
             request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyData);
             request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
@@ -98,7 +54,7 @@ public class GeminiAPIClient : MonoBehaviour
                 if (Time.time - startTime > requestTimeout)
                 {
                     Debug.LogError("GeminiAPIClient: Request timeout!");
-                    callback?.Invoke("", false);
+                    callback?.Invoke("Sorry, the request timed out. Please try again.", false);
                     yield break;
                 }
                 yield return null;
@@ -108,58 +64,43 @@ public class GeminiAPIClient : MonoBehaviour
             if (request.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
                 string responseText = request.downloadHandler.text;
+                Debug.Log($"GeminiAPIClient: Received response: {responseText}");
+                
                 string extractedResponse = ParseResponse(responseText);
                 callback?.Invoke(extractedResponse, true);
             }
             else
             {
-                Debug.LogError($"GeminiAPIClient: API request failed: {request.error}");
-                callback?.Invoke("", false);
-            }
-        }
-    }
-    
-    /// <summary>
-    /// Formats the prompt with user message and context
-    /// </summary>
-    string FormatPrompt(string userMessage, string[] context)
-    {
-        StringBuilder prompt = new StringBuilder();
-        
-        // Add system context
-        prompt.AppendLine("You are a helpful assistant for the University of Crete Computer Science Department.");
-        prompt.AppendLine("Answer questions about the university, courses, teachers, facilities, and general information.");
-        prompt.AppendLine("Be friendly, concise, and accurate.");
-        prompt.AppendLine();
-        
-        // Add relevant context if available
-        if (context != null && context.Length > 0)
-        {
-            prompt.AppendLine("Relevant information:");
-            foreach (string ctx in context)
-            {
-                if (!string.IsNullOrEmpty(ctx))
+                Debug.LogError($"GeminiAPIClient: Request failed: {request.error}");
+                Debug.LogError($"GeminiAPIClient: Response code: {request.responseCode}");
+                
+                // Provide helpful error message based on error type
+                string errorMessage = "Sorry, I couldn't connect to my brain. ";
+                if (request.responseCode == 0)
                 {
-                    prompt.AppendLine($"- {ctx}");
+                    errorMessage += "The server might not be running. Please start the Python server.";
                 }
+                else
+                {
+                    errorMessage += "Please try again later.";
+                }
+                
+                callback?.Invoke(errorMessage, false);
             }
-            prompt.AppendLine();
         }
-        
-        // Add user message
-        prompt.AppendLine($"User question: {userMessage}");
-        prompt.AppendLine();
-        prompt.AppendLine("Please provide a helpful answer:");
-        
-        return prompt.ToString();
     }
     
     /// <summary>
-    /// Escapes JSON string
+    /// Escapes special characters for JSON string
     /// </summary>
     string EscapeJsonString(string str)
     {
-        return str.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
+        return str
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t");
     }
     
     /// <summary>
@@ -169,17 +110,61 @@ public class GeminiAPIClient : MonoBehaviour
     {
         try
         {
-            // Simple JSON parsing (extract text from response)
-            // Gemini response format: {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
-            int textStart = jsonResponse.IndexOf("\"text\":\"");
-            if (textStart == -1) return "Sorry, I couldn't process that response.";
+            // Response format: {"response": "The answer here"}
+            int responseStart = jsonResponse.IndexOf("\"response\":\"");
+            if (responseStart == -1)
+            {
+                // Try alternate format with space after colon
+                responseStart = jsonResponse.IndexOf("\"response\": \"");
+                if (responseStart == -1)
+                {
+                    Debug.LogWarning("GeminiAPIClient: Could not find 'response' field in JSON");
+                    return "Sorry, I received an unexpected response format.";
+                }
+                responseStart += 13; // Skip past "response": "
+            }
+            else
+            {
+                responseStart += 12; // Skip past "response":"
+            }
             
-            textStart += 8; // Skip past "text":"
-            int textEnd = jsonResponse.IndexOf("\"", textStart);
-            if (textEnd == -1) return "Sorry, I couldn't process that response.";
+            // Find the end of the response string
+            int responseEnd = -1;
+            bool escaped = false;
+            for (int i = responseStart; i < jsonResponse.Length; i++)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+                if (jsonResponse[i] == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+                if (jsonResponse[i] == '"')
+                {
+                    responseEnd = i;
+                    break;
+                }
+            }
             
-            string text = jsonResponse.Substring(textStart, textEnd - textStart);
-            text = text.Replace("\\n", "\n").Replace("\\\"", "\"").Replace("\\\\", "\\");
+            if (responseEnd == -1)
+            {
+                Debug.LogWarning("GeminiAPIClient: Could not find end of response string");
+                return "Sorry, I couldn't process that response.";
+            }
+            
+            string text = jsonResponse.Substring(responseStart, responseEnd - responseStart);
+            
+            // Unescape JSON string
+            text = text
+                .Replace("\\n", "\n")
+                .Replace("\\r", "\r")
+                .Replace("\\t", "\t")
+                .Replace("\\\"", "\"")
+                .Replace("\\\\", "\\");
             
             return text;
         }
@@ -189,6 +174,4 @@ public class GeminiAPIClient : MonoBehaviour
             return "Sorry, there was an error processing the response.";
         }
     }
-    
 }
-
