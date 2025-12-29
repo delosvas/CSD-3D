@@ -103,6 +103,13 @@ public class GeminiAPIClient : MonoBehaviour
             .Replace("\t", "\\t");
     }
     
+    // Response class for JSON deserialization
+    [System.Serializable]
+    private class APIResponse
+    {
+        public string response;
+    }
+    
     /// <summary>
     /// Parses the API response JSON to extract the text
     /// </summary>
@@ -110,67 +117,26 @@ public class GeminiAPIClient : MonoBehaviour
     {
         try
         {
-            // Response format: {"response": "The answer here"}
-            int responseStart = jsonResponse.IndexOf("\"response\":\"");
-            if (responseStart == -1)
+            Debug.Log($"GeminiAPIClient: Raw JSON to parse: {jsonResponse}");
+            
+            // Use Unity's JsonUtility for proper Unicode handling
+            APIResponse apiResponse = JsonUtility.FromJson<APIResponse>(jsonResponse);
+            
+            if (apiResponse != null && !string.IsNullOrEmpty(apiResponse.response))
             {
-                // Try alternate format with space after colon
-                responseStart = jsonResponse.IndexOf("\"response\": \"");
-                if (responseStart == -1)
-                {
-                    Debug.LogWarning("GeminiAPIClient: Could not find 'response' field in JSON");
-                    return "Sorry, I received an unexpected response format.";
-                }
-                responseStart += 13; // Skip past "response": "
+                Debug.Log($"GeminiAPIClient: Successfully parsed response: {apiResponse.response.Substring(0, Mathf.Min(50, apiResponse.response.Length))}...");
+                return apiResponse.response;
             }
             else
             {
-                responseStart += 12; // Skip past "response":"
+                Debug.LogWarning("GeminiAPIClient: Parsed response was null or empty");
+                return "Sorry, I received an empty response.";
             }
-            
-            // Find the end of the response string
-            int responseEnd = -1;
-            bool escaped = false;
-            for (int i = responseStart; i < jsonResponse.Length; i++)
-            {
-                if (escaped)
-                {
-                    escaped = false;
-                    continue;
-                }
-                if (jsonResponse[i] == '\\')
-                {
-                    escaped = true;
-                    continue;
-                }
-                if (jsonResponse[i] == '"')
-                {
-                    responseEnd = i;
-                    break;
-                }
-            }
-            
-            if (responseEnd == -1)
-            {
-                Debug.LogWarning("GeminiAPIClient: Could not find end of response string");
-                return "Sorry, I couldn't process that response.";
-            }
-            
-            string text = jsonResponse.Substring(responseStart, responseEnd - responseStart);
-            
-            // Unescape JSON string
-            text = text
-                .Replace("\\n", "\n")
-                .Replace("\\r", "\r")
-                .Replace("\\t", "\t")
-                .Replace("\\\"", "\"")
-                .Replace("\\\\", "\\");
-            
-            return text;
         }
         catch (System.Exception e)
         {
             Debug.LogError($"GeminiAPIClient: Error parsing response: {e.Message}");
+            Debug.LogError($"GeminiAPIClient: JSON was: {jsonResponse}");
             return "Sorry, there was an error processing the response.";
         }
     }

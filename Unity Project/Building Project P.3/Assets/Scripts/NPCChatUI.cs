@@ -87,6 +87,9 @@ public class NPCChatUI : MonoBehaviour
             movementPlayer = player.GetComponent<Movement_Player>();
         }
         
+        // AUTO-FIX: If messageContainer is actually a ScrollRect, find the Content child
+        FixMessageContainerReference();
+        
         // Setup button listeners and layout
         if (sendButton != null)
         {
@@ -156,6 +159,84 @@ public class NPCChatUI : MonoBehaviour
         
         // Try to find API client (will retry when opening chat if not found)
         FindAPIClient();
+    }
+    
+    /// <summary>
+    /// Fixes the messageContainer reference if it's pointing to a ScrollRect instead of Content
+    /// </summary>
+    void FixMessageContainerReference()
+    {
+        if (messageContainer == null)
+        {
+            Debug.LogError("NPCChatUI: messageContainer is not assigned!");
+            return;
+        }
+        
+        // Check if messageContainer has a ScrollRect component (which means it's wrong)
+        ScrollRect scrollRect = messageContainer.GetComponent<ScrollRect>();
+        if (scrollRect != null)
+        {
+            Debug.LogWarning("NPCChatUI: messageContainer was pointing to a ScrollRect! Auto-fixing...");
+            
+            // Try to find the Content child
+            if (scrollRect.content != null)
+            {
+                messageContainer = scrollRect.content;
+                Debug.Log($"NPCChatUI: Fixed! messageContainer now points to: {messageContainer.name}");
+            }
+            else
+            {
+                // Try to find Viewport/Content manually
+                Transform viewport = messageContainer.Find("Viewport");
+                if (viewport != null)
+                {
+                    Transform content = viewport.Find("Content");
+                    if (content != null)
+                    {
+                        messageContainer = content;
+                        Debug.Log($"NPCChatUI: Fixed via hierarchy! messageContainer now points to: {messageContainer.name}");
+                    }
+                }
+                
+                // If still not found, try direct child named "Content"
+                if (scrollRect != null && messageContainer.GetComponent<ScrollRect>() != null)
+                {
+                    Transform content = messageContainer.Find("Content");
+                    if (content != null)
+                    {
+                        messageContainer = content;
+                        Debug.Log($"NPCChatUI: Fixed via direct child! messageContainer now points to: {messageContainer.name}");
+                    }
+                }
+            }
+        }
+        
+        // Ensure messageContainer has a VerticalLayoutGroup for proper message stacking
+        VerticalLayoutGroup layoutGroup = messageContainer.GetComponent<VerticalLayoutGroup>();
+        if (layoutGroup == null)
+        {
+            Debug.Log("NPCChatUI: Adding VerticalLayoutGroup to messageContainer");
+            layoutGroup = messageContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+            layoutGroup.childAlignment = TextAnchor.UpperLeft;
+            layoutGroup.childControlWidth = true;
+            layoutGroup.childControlHeight = true;
+            layoutGroup.childForceExpandWidth = true;
+            layoutGroup.childForceExpandHeight = false;
+            layoutGroup.spacing = 10f;
+            layoutGroup.padding = new RectOffset(10, 10, 10, 10);
+        }
+        
+        // Ensure messageContainer has ContentSizeFitter for dynamic height
+        ContentSizeFitter sizeFitter = messageContainer.GetComponent<ContentSizeFitter>();
+        if (sizeFitter == null)
+        {
+            Debug.Log("NPCChatUI: Adding ContentSizeFitter to messageContainer");
+            sizeFitter = messageContainer.gameObject.AddComponent<ContentSizeFitter>();
+            sizeFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            sizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        }
+        
+        Debug.Log($"NPCChatUI: messageContainer is ready: {messageContainer.name}");
     }
     
     void Update()
@@ -501,6 +582,9 @@ public class NPCChatUI : MonoBehaviour
     /// </summary>
     private void OnAPIResponse(string response, bool success)
     {
+        Debug.Log($"NPCChatUI: OnAPIResponse called - Success: {success}, Response length: {response?.Length ?? 0}");
+        Debug.Log($"NPCChatUI: Response content: {response}");
+        
         if (typingIndicator != null)
         {
             typingIndicator.SetActive(false);
@@ -508,10 +592,12 @@ public class NPCChatUI : MonoBehaviour
         
         if (success && !string.IsNullOrEmpty(response))
         {
+            Debug.Log("NPCChatUI: Adding NPC message to chat...");
             AddNPCMessage(response);
         }
         else
         {
+            Debug.LogWarning("NPCChatUI: API call failed or empty response");
             AddNPCMessage("Sorry, I'm having trouble connecting right now. Please try again later.");
         }
     }
@@ -529,6 +615,7 @@ public class NPCChatUI : MonoBehaviour
     /// </summary>
     void AddNPCMessage(string message)
     {
+        Debug.Log($"NPCChatUI: AddNPCMessage called with: {message.Substring(0, Mathf.Min(50, message.Length))}...");
         CreateMessage(message, false);
     }
     
@@ -537,39 +624,99 @@ public class NPCChatUI : MonoBehaviour
     /// </summary>
     void CreateMessage(string message, bool isUser)
     {
+        Debug.Log($"NPCChatUI: CreateMessage called - isUser: {isUser}, message: {message.Substring(0, Mathf.Min(30, message.Length))}...");
+        
         if (messageContainer == null)
         {
-            Debug.LogError("NPCChatUI: Message container is null!");
+            Debug.LogError("NPCChatUI: Message container is null! Cannot create messages.");
             return;
         }
         
+        Debug.Log($"NPCChatUI: messageContainer is: {messageContainer.name}, child count before: {messageContainer.childCount}");
+        
         GameObject messageObj;
         
-        // Use prefab if available, otherwise create simple text
+        // Use prefab if available, otherwise create styled message
         if (isUser && userMessagePrefab != null)
         {
             messageObj = Instantiate(userMessagePrefab, messageContainer);
+            Debug.Log("NPCChatUI: Created message using userMessagePrefab");
         }
         else if (!isUser && npcMessagePrefab != null)
         {
             messageObj = Instantiate(npcMessagePrefab, messageContainer);
+            Debug.Log("NPCChatUI: Created message using npcMessagePrefab");
         }
         else
         {
-            // Create simple text message
+            // Create styled message with background
+            Debug.Log("NPCChatUI: Creating styled text message (no prefab)");
+            
+            // Create container with background
             messageObj = new GameObject(isUser ? "UserMessage" : "NPCMessage");
-            messageObj.transform.SetParent(messageContainer);
+            messageObj.transform.SetParent(messageContainer, false);
             
-            TMP_Text textComponent = messageObj.AddComponent<TextMeshProUGUI>();
+            // Add RectTransform
+            RectTransform containerRect = messageObj.AddComponent<RectTransform>();
+            containerRect.anchorMin = new Vector2(0, 1);
+            containerRect.anchorMax = new Vector2(1, 1);
+            containerRect.pivot = new Vector2(0.5f, 1);
+            
+            // Add background Image
+            Image bgImage = messageObj.AddComponent<Image>();
+            if (isUser)
+            {
+                bgImage.color = new Color(0.2f, 0.4f, 0.6f, 0.9f); // Blue-ish for user
+            }
+            else
+            {
+                bgImage.color = new Color(0.15f, 0.15f, 0.2f, 0.9f); // Dark gray for NPC
+            }
+            
+            // Add horizontal layout for padding
+            HorizontalLayoutGroup hlg = messageObj.AddComponent<HorizontalLayoutGroup>();
+            hlg.padding = new RectOffset(15, 15, 10, 10);
+            hlg.childAlignment = isUser ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = true;
+            hlg.childForceExpandHeight = false;
+            
+            // Add ContentSizeFitter to container
+            ContentSizeFitter containerFitter = messageObj.AddComponent<ContentSizeFitter>();
+            containerFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            containerFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            
+            // Create text child
+            GameObject textObj = new GameObject("MessageText");
+            textObj.transform.SetParent(messageObj.transform, false);
+            
+            RectTransform textRect = textObj.AddComponent<RectTransform>();
+            
+            TextMeshProUGUI textComponent = textObj.AddComponent<TextMeshProUGUI>();
             textComponent.text = message;
-            textComponent.fontSize = 16;
-            textComponent.color = isUser ? Color.white : Color.cyan;
-            textComponent.alignment = isUser ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
+            textComponent.fontSize = 20;
+            textComponent.fontStyle = FontStyles.Normal;
+            textComponent.enableWordWrapping = true;
+            textComponent.overflowMode = TextOverflowModes.Overflow;
+            textComponent.alignment = isUser ? TextAlignmentOptions.Right : TextAlignmentOptions.Left;
             
-            // Add layout component for proper sizing
-            ContentSizeFitter fitter = messageObj.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            // HIGH CONTRAST COLORS
+            if (isUser)
+            {
+                textComponent.color = new Color(1f, 1f, 0.8f, 1f); // Bright yellow-white for user
+            }
+            else
+            {
+                textComponent.color = new Color(0.4f, 1f, 0.9f, 1f); // Bright cyan for NPC
+            }
+            
+            // Add LayoutElement to text for proper sizing
+            LayoutElement textLayout = textObj.AddComponent<LayoutElement>();
+            textLayout.flexibleWidth = 1;
+            textLayout.minHeight = 25;
+            
+            Debug.Log($"NPCChatUI: Created styled message with text: {textComponent.text.Substring(0, Mathf.Min(30, textComponent.text.Length))}...");
         }
         
         // Set text if using prefab
@@ -577,10 +724,15 @@ public class NPCChatUI : MonoBehaviour
         if (text != null)
         {
             text.text = message;
+            Debug.Log($"NPCChatUI: Set text on message: {text.text.Substring(0, Mathf.Min(30, text.text.Length))}...");
         }
+        
+        // Ensure the message object is active
+        messageObj.SetActive(true);
         
         // Add to history
         messageObjects.Add(messageObj);
+        Debug.Log($"NPCChatUI: Message added. Total messages in container: {messageContainer.childCount}");
         
         // Limit history size
         if (messageObjects.Count > maxMessageHistory)
@@ -589,6 +741,10 @@ public class NPCChatUI : MonoBehaviour
             messageObjects.RemoveAt(0);
             Destroy(oldMessage);
         }
+        
+        // Force layout rebuild
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(messageContainer.GetComponent<RectTransform>());
         
         // Scroll to bottom
         StartCoroutine(ScrollToBottom());
