@@ -1,6 +1,6 @@
 # NPC System with LLM Integration - Complete Implementation Plan
 
-## 📋 Overview
+##  Overview
 
 This document outlines the complete plan for adding an interactive NPC system to the Unity 3D University building project. The NPC will:
 1. Have animations (idle, talking, greeting)
@@ -11,7 +11,7 @@ This document outlines the complete plan for adding an interactive NPC system to
 
 ---
 
-## 🎯 System Architecture
+##  System Architecture
 
 ### High-Level Flow
 ```
@@ -22,7 +22,7 @@ Send to Gemini API with Context → Receive Response → Display in Chat
 
 ---
 
-## 📁 File Structure & Implementation Locations
+##  File Structure & Implementation Locations
 
 ### **NEW FILES TO CREATE:**
 
@@ -76,7 +76,7 @@ Send to Gemini API with Context → Receive Response → Display in Chat
 
 ---
 
-## 🔧 MODIFICATIONS TO EXISTING FILES
+##  MODIFICATIONS TO EXISTING FILES
 
 ### **1. `Movement_Player.cs`** 
 **Location:** `Unity Project/Building Project P.3/Assets/Scripts/Movement_Player.cs`
@@ -112,7 +112,7 @@ if (Input.GetKeyDown(KeyCode.E) && NPCInteractionEnabled)
 
 ---
 
-## 🏗️ Implementation Details
+##  Implementation Details
 
 ### **Phase 1: NPC Setup & Detection**
 
@@ -249,7 +249,7 @@ Methods:
 
 ---
 
-## 🔐 Security & Configuration
+##  Security & Configuration
 
 ### **API Key Management:**
 Create `Config/NPCConfig.cs` (ScriptableObject):
@@ -265,7 +265,7 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
 
 ---
 
-## 📊 Data Flow Diagram
+##  Data Flow Diagram
 
 ```
 [Player] 
@@ -276,6 +276,8 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
     ↓
 [NPCChatUI] (Open chat panel)
     ↓ (User types message)
+[FastApiServer]
+    ↓
 [VectorStoreManager] (Search for relevant context)
     ↓
 [GeminiAPIClient] (Send query + context to API)
@@ -287,7 +289,7 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
 
 ---
 
-## 🎨 UI/UX Considerations
+##  UI/UX Considerations
 
 1. **Interaction Prompt:**
    - Floating text above NPC: "Press E to Talk"
@@ -308,7 +310,7 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
 
 ---
 
-## 🧪 Testing Checklist
+##  Testing Checklist
 
 - [ ] NPC appears in scene with animations
 - [ ] Player detection works at correct range
@@ -324,7 +326,7 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
 
 ---
 
-## 🚀 Implementation Order
+##  Implementation Order
 
 1. **Week 1: Foundation**
    - Create NPC GameObject and basic setup
@@ -353,7 +355,7 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
 
 ---
 
-## 📝 Key Integration Points
+##  Key Integration Points
 
 ### **Minimal Invasiveness Strategy:**
 
@@ -376,56 +378,4 @@ Create `Config/NPCConfig.cs` (ScriptableObject):
    - Doesn't interfere with existing UI elements
 
 ---
-
-## 🔄 Compatibility Notes
-
-- **Existing E Key Usage:** The E key currently opens the navigation menu. We'll add priority checking so NPC interaction takes precedence when near an NPC.
-- **Mobile Support:** Will work with existing mobile input system
-- **WebGL Build:** API calls will need CORS configuration for WebGL deployment
-- **Performance:** Vector search and API calls are async to prevent frame drops
-
----
-
-## 📚 Additional Resources Needed
-
-1. **NPC Model & Animations:**
-   - 3D character model (can use Unity Asset Store or create)
-   - Idle animation
-   - Talking animation (mouth movement or gesture)
-   - Greeting animation (wave, nod, etc.)
-
-2. **API Access:**
-   - Gemini Studio API key
-   - API endpoint documentation
-
-3. **Vector Embeddings:**
-   - Embedding model (can use Gemini's embedding API or local model)
-   - Or pre-computed embeddings for university data
-
----
-
-## ✅ Success Criteria
-
-- NPC is visible and animated in the scene
-- Player can approach and interact with NPC
-- Chat interface is functional and responsive
-- NPC provides accurate answers about university information
-- System works on both PC and mobile
-- No conflicts with existing functionality
-- Performance is smooth (60 FPS maintained)
-
----
-
-## 🎓 Next Steps
-
-1. Review this plan with your professor
-2. Obtain NPC model/assets or create placeholder
-3. Get Gemini API access and key
-4. Start with Phase 1 (NPC setup)
-5. Iterate and test each phase
-
----
-
-**End of Implementation Plan**
-
 
