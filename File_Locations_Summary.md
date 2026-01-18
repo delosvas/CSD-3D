@@ -1,6 +1,6 @@
-# 📁 File Locations Summary - NPC System Implementation
+#  File Locations Summary - NPC System Implementation
 
-## 🆕 NEW FILES TO CREATE
+##  NEW FILES 
 
 ### **Scripts Folder:**
 `Unity Project/Building Project P.3/Assets/Scripts/`
@@ -25,76 +25,20 @@
 
 ---
 
-## ✏️ FILES TO MODIFY
-
-### **1. WaypointSystem.cs**
-**Location:** `Unity Project/Building Project P.3/Assets/Scripts/WaypointSystem.cs`
-
-**Changes:**
-- **Line ~42:** Add new flag: `public bool NPCInteractionEnabled = true;`
-- **Line ~326-339:** Modify `HandleInput()` method to check for NPC interaction BEFORE menu toggle
-- **Add reference:** `public NPCInteractionDetector npcDetector;` (optional, for coordination)
-
-**Specific Modification:**
-```csharp
-// Around line 332, modify the E key check:
-if (Input.GetKeyDown(KeyCode.E))
-{
-    // First check if NPC interaction is available
-    if (NPCInteractionEnabled && npcDetector != null && npcDetector.IsInteractingWithNPC())
-    {
-        // NPC interaction takes priority, don't open menu
-        return;
-    }
-    
-    // Original menu toggle code continues...
-    if (EbeingAbledToUse == true)
-    {
-        // ... existing code ...
-    }
-}
-```
-
-### **2. ItemCollector.cs** (Optional - Minimal Change)
-**Location:** `Unity Project/Building Project P.3/Assets/Scripts/ItemCollector.cs`
-
-**Changes:**
-- **Line ~15:** Add reference: `public GameObject npcInteractionDetector;` (optional)
-- **Line ~82:** Add check to hide NPC prompt when item interaction is active
-
-**Specific Modification:**
-```csharp
-// Around line 82, when showing interactionUI:
-if (Physics.Raycast(ray, out hit, 3f, itemLayer))
-{
-    // Hide NPC prompt if it's showing
-    if (npcInteractionDetector != null)
-    {
-        npcInteractionDetector.GetComponent<NPCInteractionDetector>()?.HideInteractionPrompt();
-    }
-    // ... existing code ...
-}
-```
-
----
-
-## 🎯 INTEGRATION POINTS IN EXISTING CODE
+##  INTEGRATION POINTS IN EXISTING CODE
 
 ### **Movement_Player.cs**
 **Location:** `Unity Project/Building Project P.3/Assets/Scripts/Movement_Player.cs`
-- **NO CHANGES NEEDED** ✅
+- **NO CHANGES NEEDED** 
 - NPC system works independently
 - Movement remains unaffected
 
 ### **Input System**
 **Location:** `Unity Project/Building Project P.3/Assets/InputSystem_Actions.inputactions`
-- **NO CHANGES NEEDED** ✅
-- Uses existing E key binding
-- Can optionally use Unity Input System if desired
 
----
 
-## 📂 DATA FILES (Read-Only Usage)
+
+##  DATA FILES (Read-Only Usage)
 
 ### **Excel Files Folder:**
 `Excel Files/`
@@ -111,7 +55,7 @@ These files will be read by `VectorStoreManager.cs`:
 
 ---
 
-## 🏗️ SCENE SETUP (Unity Editor)
+##  SCENE SETUP (Unity Editor)
 
 ### **In Unity Scene:**
 1. **Create NPC GameObject:**
@@ -136,7 +80,7 @@ These files will be read by `VectorStoreManager.cs`:
 
 ---
 
-## 🔧 CONFIGURATION FILES
+##  CONFIGURATION FILES
 
 ### **NPCConfig.asset** (ScriptableObject)
 **Location:** `Unity Project/Building Project P.3/Assets/Settings/NPCConfig.asset`
@@ -148,11 +92,11 @@ These files will be read by `VectorStoreManager.cs`:
 - Similarity threshold for vector search
 - Response timeout settings
 
-**⚠️ IMPORTANT:** Add this file to `.gitignore` to prevent committing API keys!
+** IMPORTANT:** Add this file to `.gitignore` to prevent committing API keys!
 
 ---
 
-## 📋 FILE DEPENDENCY CHART
+##  FILE DEPENDENCY CHART
 
 ```
 NPCController.cs
@@ -161,6 +105,8 @@ NPCInteractionDetector.cs
     ↓ (triggers)
 NPCChatUI.cs
     ↓ (sends queries to)
+FastAPI_Server
+    ↓ 
 GeminiAPIClient.cs
     ↓ (gets context from)
 VectorStoreManager.cs
@@ -170,7 +116,7 @@ Excel Files/*.csv
 
 ---
 
-## 🎨 ASSETS NEEDED (External)
+##  ASSETS NEEDED (External)
 
 ### **3D Assets:**
 - NPC character model (FBX or similar)
@@ -189,7 +135,7 @@ Excel Files/*.csv
 
 ---
 
-## 📝 SUMMARY TABLE
+##  SUMMARY TABLE
 
 | File Type | Location | Action | Priority |
 |-----------|----------|--------|----------|
@@ -207,7 +153,7 @@ Excel Files/*.csv
 
 ---
 
-## ✅ CHECKLIST FOR IMPLEMENTATION
+##  CHECKLIST FOR IMPLEMENTATION
 
 ### **Phase 1: Core NPC System**
 - [ ] Create `NPCController.cs` in Scripts folder
@@ -229,11 +175,6 @@ Excel Files/*.csv
 - [ ] Test API connectivity
 - [ ] Test vector search
 
-### **Phase 4: Polish**
-- [ ] Optional: Modify `ItemCollector.cs` for coordination
-- [ ] Add error handling
-- [ ] Performance optimization
-- [ ] Mobile testing
 
 ---
 
