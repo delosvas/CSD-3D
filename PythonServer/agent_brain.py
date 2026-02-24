@@ -76,136 +76,35 @@ class AgentBrain:
     
     
     def _initialize_vectorstore(self):
-        """Initialize ChromaDB vector store with BATCHED FAQ embeddings."""
-        import time
-        
+        """Load existing ChromaDB vector store (Read-Only)."""
         persist_directory = "./chroma_db_agent"
         
-        print("Initializing embeddings...")
+        print("Loading vector store...")
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
+            model="models/gemini-embedding-001",
             google_api_key=self.api_key
         )
         
-        # Check if vectorstore exists
         if os.path.exists(persist_directory) and os.listdir(persist_directory):
-            print(f"Loading existing vector store from {persist_directory}...")
-            self.vectorstore = Chroma(
-                persist_directory=persist_directory,
-                embedding_function=embeddings,
-                collection_name="university_faqs"
-            )
-            
-            count = self.vectorstore._collection.count()
-            if count > 0:
-                print(f"   Loaded {count} documents from disk")
-                return
-            print("   Vector store empty, will rebuild...")
-        
-        # Create new vectorstore
-        print("Creating new vector store with BATCH embedding...")
-        
-        self.vectorstore = Chroma(
-            embedding_function=embeddings,
-            persist_directory=persist_directory,
-            collection_name="university_faqs"
-        )
-        
-        # ========== BATCH 1: Knowledge Base Articles ==========
-        print(f"   Preparing {len(self.kb_articles)} articles for batch embedding...")
-        kb_texts = []
-        kb_metadatas = []
-        kb_ids = []
-        
-        for article in self.kb_articles:
-            text = f"Θέμα: {article['title']}\nΠληροφορίες: {article['content']}"
-            kb_texts.append(text)
-            kb_metadatas.append({
-                "id": article["id"],
-                "type": "kb_article",
-                "category": article.get("category", "general"),
-                "title": article["title"][:200]
-            })
-            kb_ids.append(f"kb_{article['id']}")
-        
-        if kb_texts:
             try:
-                print(f"   Sending KB batch ({len(kb_texts)} texts)...")
-                self.vectorstore.add_texts(
-                    texts=kb_texts,
-                    metadatas=kb_metadatas,
-                    ids=kb_ids
+                self.vectorstore = Chroma(
+                    persist_directory=persist_directory,
+                    embedding_function=embeddings,
+                    collection_name="university_faqs"
                 )
-                print(f"   KB batch embedded successfully!")
+                print(f"   Vector store loaded successfully")
             except Exception as e:
-                print(f"   Error embedding KB batch: {e}")
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    print("   Rate limit hit, waiting 60s and retrying...")
-                    time.sleep(60)
-                    self.vectorstore.add_texts(
-                        texts=faq_texts,
-                        metadatas=faq_metadatas,
-                        ids=faq_ids
-                    )
-        
-        # Small delay before next batch
-        time.sleep(5)
-        
-        # ========== BATCH 2: Structured Courses ==========
-        print(f"   Preparing {len(self.courses)} courses for batch embedding...")
-        course_texts = []
-        course_metadatas = []
-        course_ids = []
-        
-        for course in self.courses:
-            # Create rich text for each course
-            prereqs_str = ", ".join(course.get("prerequisites", [])) if course.get("prerequisites") else "Κανένα"
-            category_name = self.categories.get(course.get("category", ""), {}).get("name", course.get("category", ""))
-            
-            text = f"""Μάθημα: {course['code']} - {course['name']}
-ECTS: {course.get('ects', 'N/A')}
-Κατηγορία: {course.get('category', 'N/A')} - {category_name}
-Εξάμηνο: {course.get('semester', 'Επιλογής')}
-Προαπαιτούμενα: {prereqs_str}
-{f"Σημείωση: {course.get('prerequisite_note')}" if course.get('prerequisite_note') else ""}"""
-            
-            course_texts.append(text)
-            course_metadatas.append({
-                "code": course["code"],
-                "name": course["name"],
-                "type": "course",
-                "category": course.get("category", ""),
-                "ects": course.get("ects", 0)
-            })
-            course_ids.append(f"course_{course['code']}")
-        
-        if course_texts:
-            try:
-                print(f"   Sending courses batch ({len(course_texts)} courses)...")
-                self.vectorstore.add_texts(
-                    texts=course_texts,
-                    metadatas=course_metadatas,
-                    ids=course_ids
-                )
-                print(f"   Courses batch embedded successfully!")
-            except Exception as e:
-                print(f"   Error embedding courses batch: {e}")
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    print("   Rate limit hit, waiting 60s and retrying...")
-                    time.sleep(60)
-                    self.vectorstore.add_texts(
-                        texts=course_texts,
-                        metadatas=course_metadatas,
-                        ids=course_ids
-                    )
-        
-        print(f"   Vector store created with {self.vectorstore._collection.count()} documents")
+                print(f"   Error loading vector store: {e}")
+                self.vectorstore = None
+        else:
+            print("   Vector store not found! Run 'python init_data.py' to create it.")
+            self.vectorstore = None
     
     def _create_agent(self):
         """Create the LangGraph ReAct agent with tools."""
         print("Creating AI Agent...")
         
-        # Initialize the LLM - gemini-2.0-flash (1500 RPD - much better limits!)
+        # Initialize the LLM - gemini-2.0-flash (1500 RPD   )
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=self.api_key,
@@ -257,49 +156,49 @@ ECTS: {course.get('ects', 'N/A')}
             """
             print(f"search_university_policy called with: '{query}'")
             
-            query_lower = query.lower()
-            query_words = query_lower.split()
+            if not vectorstore:
+                return "Σφάλμα: Η βάση γνώσης δεν είναι διαθέσιμη."
             
-            # Score each article based on keyword matches
-            scored_articles = []
-            for article in kb_articles:
-                title = article.get("title", "").lower()
-                content = article.get("content", "").lower()
-                tags = [t.lower() for t in article.get("tags", [])]
-                full_text = title + " " + content + " " + " ".join(tags)
+            try:
+                # Perform semantic search
+                results = vectorstore.similarity_search(query, k=4)
                 
-                # Calculate score
-                score = 0
-                for word in query_words:
-                    if len(word) < 3:  # Skip short words
-                        continue
-                    if word in title:
-                        score += 10  # Title match is strong
-                    if word in content:
-                        score += 5   # Content match
-                    if word in tags:
-                        score += 8   # Tag match is also strong
+                if not results:
+                    return "Δεν βρέθηκαν σχετικές πληροφορίες στη βάση γνώσης."
                 
-                if score > 0:
-                    scored_articles.append((score, article))
-            
-            # Sort by score descending
-            scored_articles.sort(key=lambda x: x[0], reverse=True)
-            
-            print(f"Found {len(scored_articles)} matching articles")
-            for i, (score, art) in enumerate(scored_articles[:3]):
-                print(f"   Match {i} (score={score}): {art['title'][:60]}...")
-            
-            if not scored_articles:
-                return "Δεν βρέθηκαν σχετικές πληροφορίες στη βάση γνώσης."
-            
-            # Return top 3 matches
-            results = []
-            for score, article in scored_articles[:3]:
-                text = f"**{article['title']}**\n{article['content']}"
-                results.append(text)
-            
-            return "\n\n---\n\n".join(results)
+                print(f"Found {len(results)} matching articles via Embeddings")
+                formatted_results = []
+                
+                for i, doc in enumerate(results):
+                    # Extract metadata
+                    meta = doc.metadata
+                    doc_type = meta.get("type", "unknown")
+                    
+                    if doc_type == "course":
+                        # Format course result
+                        code = meta.get("code", "N/A")
+                        name = meta.get("name", "Άγνωστο Μάθημα")
+                        ects = meta.get("ects", "?")
+                        title = f"ΜΑΘΗΜΑ: {code} - {name} ({ects} ECTS)"
+                    else:
+                        # Format generic/KB result
+                        title = meta.get("title", f"Αποτέλεσμα {i+1}")
+                    
+                    content = doc.page_content
+                    
+                    # Clean up "Θέμα:" prefix if present in content
+                    if content.startswith("Θέμα:"):
+                        # Optional: Remove the raw header if we already have the title
+                        pass
+                        
+                    formatted_results.append(f"**{title}**\n{content}")
+                    print(f"Match {i}: {title[:50]}...")
+                
+                return "\n\n---\n\n".join(formatted_results)
+                
+            except Exception as e:
+                print(f"Error during semantic search: {e}")
+                return "Παρουσιάστηκε σφάλμα κατά την αναζήτηση."
         
         # ==================== TOOL 2: Course Catalog ====================
         @tool
@@ -538,7 +437,7 @@ ECTS: {course.get('ects', 'N/A')}
         max_retries = 3
         retry_delays = [30, 60, 90]
         
-        print(f"\nReceived Question: {question}")
+        print(f"\n📝 Received Question: {question}")
         
         for attempt in range(max_retries):
             try:
@@ -564,7 +463,7 @@ ECTS: {course.get('ects', 'N/A')}
                                 final_response = msg.content
                                 break
                 
-                print(f"Final Response: {final_response}\n" + "-"*50)
+                print(f"✅ Final Response: {final_response}\n" + "-"*50)
                 return final_response
                 
             except Exception as e:
@@ -620,6 +519,6 @@ if __name__ == "__main__":
     ]
     
     for q in test_questions:
-        print(f"\nΕρώτηση: {q}")
+        print(f"\n❓ Ερώτηση: {q}")
         answer = brain.ask_sync(q)
         print(f"Απάντηση: {answer}")
